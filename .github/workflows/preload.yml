@@ -14,6 +14,12 @@ on:
         required: false
         default: false
         type: boolean
+  # TEMPORARY: enables end-to-end validation from PR #1. Remove before merge.
+  pull_request:
+    paths:
+      - "config/**"
+      - "src/preloader/**"
+      - ".github/workflows/preload.yml"
 
 concurrency:
   group: cache-preload
@@ -41,6 +47,10 @@ jobs:
             uv pip install playwright
             uv run playwright install --with-deps chromium
           fi
+
+      - name: Discover URLs (dry-run, PR validation only)
+        if: github.event_name == 'pull_request'
+        run: uv run python -m preloader --config config/sites.yml --dry-run
 
       - name: Run preloader
         run: |
