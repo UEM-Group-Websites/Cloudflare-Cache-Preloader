@@ -1,0 +1,50 @@
+name: Cloudflare Cache Preload
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"          # every 30 minutes
+  workflow_dispatch:
+    inputs:
+      site:
+        description: "Run a single site by name (optional)"
+        required: false
+        type: string
+      dry_run:
+        description: "Discover URLs only, don't fetch"
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: cache-preload
+  cancel-in-progress: false
+
+jobs:
+  preload:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          python-version: "3.11"
+          enable-cache: true
+
+      - name: Sync dependencies
+        run: uv sync
+
+      - name: Install Playwright browsers if any site uses it
+        run: |
+          if grep -q 'fetcher: *playwright' config/sites.yml; then
+            uv pip install playwright
+            uv run playwright install --with-deps chromium
+          fi
+
+      - name: Run preloader
+        run: |
+          ARGS="--config config/sites.yml"
+          if [ -n "${{ inputs.site }}" ]; then ARGS="$ARGS --site ${{ inputs.site }}"; fi
+          if [ "${{ inputs.dry_run }}" = "true" ]; then ARGS="$ARGS --dry-run"; fi
+          uv run python -m preloader $ARGS

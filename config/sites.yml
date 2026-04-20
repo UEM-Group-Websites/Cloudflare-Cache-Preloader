@@ -1,0 +1,23 @@
+# Cloudflare Cache Preloader — site configuration.
+# Run locally:  uv run python -m preloader --config config/sites.yml --dry-run
+# Run a single site:  uv run python -m preloader --config config/sites.yml --site iem
+#
+# If a site exposes a Yoast/WP-style sitemap index, swap /sitemap.xml for
+# /sitemap_index.xml below. The discoverer recursively walks sitemap indexes.
+
+defaults:
+  fetcher: httpx
+  concurrency: 10
+  timeout_seconds: 20
+  retry_attempts: 2
+  max_urls_per_site: 5000
+  request_delay_ms: 0
+
+sites:
+  - name: iem
+    sitemap_urls:
+      - https://iem.edu.in/sitemap.xml
+
+  - name: uem
+    sitemap_urls:
+      - https://uem.edu.in/sitemap.xml

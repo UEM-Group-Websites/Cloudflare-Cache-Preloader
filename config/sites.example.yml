@@ -1,0 +1,34 @@
+# Example showing every supported config knob.
+
+defaults:
+  fetcher: httpx                     # httpx | playwright
+  user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+  headers:
+    Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8"
+    Accept-Language: "en-US,en;q=0.9"
+    Accept-Encoding: "gzip, deflate, br"
+    Sec-Fetch-Dest: "document"
+    Sec-Fetch-Mode: "navigate"
+  concurrency: 10                    # parallel requests per site
+  timeout_seconds: 20
+  retry_attempts: 2
+  max_urls_per_site: 5000
+  sitemap_url_filters: []            # optional regex allow-list applied to discovered URLs
+  request_delay_ms: 0                # throttle between requests per worker
+
+sites:
+  - name: example-blog
+    sitemap_urls:
+      - https://example.com/sitemap_index.xml
+    concurrency: 20
+
+  - name: protected-site
+    sitemap_urls:
+      - https://protected.example.com/sitemap.xml
+    fetcher: playwright              # opt-in browser fetch for sites with bot protection
+    concurrency: 3
+    headers:
+      Referer: https://protected.example.com/
+      Authorization: "Bearer ${MY_TOKEN}"   # ${ENV_VAR} interpolation
+    sitemap_url_filters:
+      - "^https://protected\\.example\\.com/(blog|docs)/"
