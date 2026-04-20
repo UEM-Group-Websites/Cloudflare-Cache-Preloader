@@ -2,22 +2,38 @@
 # Run locally:  uv run python -m preloader --config config/sites.yml --dry-run
 # Run a single site:  uv run python -m preloader --config config/sites.yml --site iem
 #
-# If a site exposes a Yoast/WP-style sitemap index, swap /sitemap.xml for
-# /sitemap_index.xml below. The discoverer recursively walks sitemap indexes.
+# WORDFENCE NOTE: Both sites run Wordfence which blocks IPs exceeding its
+# default 240 pages/min rate limit with HTTP 503. Keep concurrency * (1000 /
+# request_delay_ms) well below 240 to avoid self-imposed blocks.
+# At concurrency=2 + delay=500ms: ~4 req/s = 240 req/min (right at threshold),
+# so 300ms delay gives ~6 req/s per worker → 12 req/s total = 720/min. Too fast.
+# concurrency=2 + delay=1000ms → 2 req/s → 120/min. Safe.
+# concurrency=2 + delay=500ms  → 4 req/s → 240/min. Borderline — avoid.
+# The config below targets ~100 req/min per site (well below the 240 block limit).
 
 defaults:
   fetcher: httpx
-  concurrency: 10
+  # Conservative global defaults for Wordfence-protected WordPress sites.
+  # 3 workers × 1 req/250ms = ~12 req/s = 720 req/min — too aggressive.
+  # Override per-site for Wordfence hosts (see below).
+  concurrency: 3
   timeout_seconds: 20
   retry_attempts: 2
   max_urls_per_site: 5000
-  request_delay_ms: 0
+  request_delay_ms: 250
 
 sites:
   - name: iem
     sitemap_urls:
-      - https://iem.edu.in/sitemap.xml
+      - https://iem.edu.in/sitemap_index.xml
+      - https://iem.edu.in/sitemap.xml        # fallback if index not present
+    # 2 workers × 1 req/600ms ≈ 3 req/s = ~200 req/min — below 240/min limit.
+    concurrency: 2
+    request_delay_ms: 600
 
   - name: uem
     sitemap_urls:
-      - https://uem.edu.in/sitemap.xml
+      - https://uem.edu.in/sitemap_index.xml
+      - https://uem.edu.in/sitemap.xml        # fallback if index not present
+    concurrency: 2
+    request_delay_ms: 600

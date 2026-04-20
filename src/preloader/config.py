@@ -42,12 +42,14 @@ class Defaults(BaseModel):
     fetcher: FetcherKind = "httpx"
     user_agent: str = DEFAULT_USER_AGENT
     headers: dict[str, str] = Field(default_factory=lambda: dict(DEFAULT_HEADERS))
-    concurrency: int = 10
+    concurrency: int = 3
     timeout_seconds: float = 20.0
     retry_attempts: int = 2
     max_urls_per_site: int = 5000
     sitemap_url_filters: list[str] = Field(default_factory=list)
-    request_delay_ms: int = 0
+    # 250 ms between requests per worker keeps ~12 req/s across 3 workers,
+    # well under Wordfence's default 240 pages/min block threshold.
+    request_delay_ms: int = 250
 
     @field_validator("headers", mode="after")
     @classmethod
