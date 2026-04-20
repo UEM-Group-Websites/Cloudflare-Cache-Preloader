@@ -41,10 +41,10 @@ jobs:
       - name: Sync dependencies
         run: uv sync
 
-      - name: Install Playwright browsers if any site uses it
+      - name: Install Playwright (if any site uses it)
         run: |
           if grep -q 'fetcher: *playwright' config/sites.yml; then
-            uv pip install playwright
+            uv sync --extra playwright
             uv run playwright install --with-deps chromium
           fi
 
@@ -53,8 +53,11 @@ jobs:
         run: uv run python -m preloader --config config/sites.yml --dry-run
 
       - name: Run preloader
+        env:
+          INPUT_SITE: ${{ inputs.site }}
+          INPUT_DRY_RUN: ${{ inputs.dry_run }}
         run: |
-          ARGS="--config config/sites.yml"
-          if [ -n "${{ inputs.site }}" ]; then ARGS="$ARGS --site ${{ inputs.site }}"; fi
-          if [ "${{ inputs.dry_run }}" = "true" ]; then ARGS="$ARGS --dry-run"; fi
-          uv run python -m preloader $ARGS
+          args=(--config config/sites.yml)
+          if [ -n "$INPUT_SITE" ]; then args+=(--site "$INPUT_SITE"); fi
+          if [ "$INPUT_DRY_RUN" = "true" ]; then args+=(--dry-run); fi
+          uv run python -m preloader "${args[@]}"

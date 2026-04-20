@@ -79,13 +79,11 @@ async def _run_site(site: ResolvedSite, dry_run: bool) -> SiteReport:
 
 
 async def run(sites: list[ResolvedSite], dry_run: bool = False) -> list[SiteReport]:
-    reports: list[SiteReport] = []
-    for site in sites:
+    async def _safe(site: ResolvedSite) -> SiteReport:
         try:
-            reports.append(await _run_site(site, dry_run=dry_run))
-        except Exception as e:  # never let one site take down the whole run
+            return await _run_site(site, dry_run=dry_run)
+        except Exception as e:
             logger.exception("[%s] unrecoverable error", site.name)
-            reports.append(
-                SiteReport(name=site.name, errors=[(site.name, f"{type(e).__name__}: {e}")])
-            )
-    return reports
+            return SiteReport(name=site.name, errors=[(site.name, f"{type(e).__name__}: {e}")])
+
+    return list(await asyncio.gather(*(_safe(s) for s in sites)))

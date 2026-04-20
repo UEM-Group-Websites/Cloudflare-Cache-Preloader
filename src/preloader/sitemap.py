@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import gzip
 import logging
 import re
@@ -73,15 +74,21 @@ async def _walk(
     tag = _strip_ns(root.tag)
 
     if tag == "sitemapindex":
+        sub_urls: list[str] = []
         for sm in root:
             if _strip_ns(sm.tag) != "sitemap":
                 continue
             loc_el = next((c for c in sm if _strip_ns(c.tag) == "loc"), None)
             if loc_el is None or not loc_el.text:
                 continue
-            await _walk(client, loc_el.text.strip(), depth + 1, seen_sitemaps, out, filters, max_urls)
-            if len(out.urls) >= max_urls:
-                return
+            sub_urls.append(loc_el.text.strip())
+        if sub_urls:
+            await asyncio.gather(
+                *(
+                    _walk(client, u, depth + 1, seen_sitemaps, out, filters, max_urls)
+                    for u in sub_urls
+                )
+            )
     elif tag == "urlset":
         for u in root:
             if _strip_ns(u.tag) != "url":

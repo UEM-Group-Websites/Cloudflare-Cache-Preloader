@@ -94,27 +94,48 @@ class PlaywrightFetcher:
             extra_http_headers={k: v for k, v in self.site.headers.items() if k.lower() != "user-agent"},
         )
 
-    async def fetch(self, url: str) -> FetchResult:
-        await self._ensure()
+    async def _fetch_once(self, url: str) -> tuple[int | None, str, str | None]:
         assert self._context is not None
         page = await self._context.new_page()
-        start = time.monotonic()
-        cf_status = "NONE"
-        status_code: int | None = None
-        error: str | None = None
         try:
             resp = await page.goto(url, wait_until="domcontentloaded", timeout=int(self.site.timeout_seconds * 1000))
-            if resp is not None:
-                status_code = resp.status
-                cf_status = _bucket_status(resp.headers.get("cf-cache-status"))
-                if not (200 <= status_code < 400):
-                    error = f"HTTP {status_code}"
-        except Exception as e:  # playwright raises a variety of types
-            error = f"{type(e).__name__}: {e}"
+            if resp is None:
+                return None, "NONE", "no response"
+            status = resp.status
+            cf = _bucket_status(resp.headers.get("cf-cache-status"))
+            err = None if 200 <= status < 400 else f"HTTP {status}"
+            return status, cf, err
         finally:
             await page.close()
-        elapsed = int((time.monotonic() - start) * 1000)
-        return FetchResult(url=url, status_code=status_code, cf_cache_status=cf_status, elapsed_ms=elapsed, error=error)
+
+    async def fetch(self, url: str) -> FetchResult:
+        await self._ensure()
+        start = time.monotonic()
+        last_err: str | None = None
+        for attempt in range(self.site.retry_attempts + 1):
+            try:
+                status, cf, err = await self._fetch_once(url)
+                # Only retry on transient network errors; bad HTTP codes return as-is.
+                if err is None or (status is not None and status < 500):
+                    return FetchResult(
+                        url=url,
+                        status_code=status,
+                        cf_cache_status=cf,
+                        elapsed_ms=int((time.monotonic() - start) * 1000),
+                        error=err,
+                    )
+                last_err = err
+            except Exception as e:
+                last_err = f"{type(e).__name__}: {e}"
+            if attempt < self.site.retry_attempts:
+                await asyncio.sleep(0.5 * (2**attempt))
+        return FetchResult(
+            url=url,
+            status_code=None,
+            cf_cache_status="NONE",
+            elapsed_ms=int((time.monotonic() - start) * 1000),
+            error=last_err,
+        )
 
     async def aclose(self) -> None:
         if self._context is not None:

@@ -36,7 +36,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"No site named {args.site!r} in config", file=sys.stderr)
             return 2
 
-    if args.max_urls:
+    if args.max_urls is not None:
         for s in sites:
             s.max_urls = args.max_urls
 

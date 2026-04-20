@@ -18,7 +18,7 @@ DEFAULT_USER_AGENT = (
 DEFAULT_HEADERS: dict[str, str] = {
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
     "Accept-Language": "en-US,en;q=0.9",
-    "Accept-Encoding": "gzip, deflate, br",
+    "Accept-Encoding": "gzip, deflate",
     "Sec-Fetch-Dest": "document",
     "Sec-Fetch-Mode": "navigate",
     "Sec-Fetch-Site": "none",
@@ -117,19 +117,22 @@ class Config(BaseModel):
             filters_raw = s.sitemap_url_filters if s.sitemap_url_filters is not None else d.sitemap_url_filters
             filters = [re.compile(p) for p in filters_raw]
 
+            def _pick(site_val, default_val):
+                return default_val if site_val is None else site_val
+
             resolved.append(
                 ResolvedSite(
                     name=s.name,
                     sitemap_urls=s.sitemap_urls,
-                    fetcher=s.fetcher or d.fetcher,
+                    fetcher=_pick(s.fetcher, d.fetcher),
                     user_agent=ua,
                     headers=merged_headers,
-                    concurrency=s.concurrency or d.concurrency,
-                    timeout_seconds=s.timeout_seconds or d.timeout_seconds,
-                    retry_attempts=s.retry_attempts if s.retry_attempts is not None else d.retry_attempts,
-                    max_urls=s.max_urls or d.max_urls_per_site,
+                    concurrency=_pick(s.concurrency, d.concurrency),
+                    timeout_seconds=_pick(s.timeout_seconds, d.timeout_seconds),
+                    retry_attempts=_pick(s.retry_attempts, d.retry_attempts),
+                    max_urls=_pick(s.max_urls, d.max_urls_per_site),
                     sitemap_url_filters=filters,
-                    request_delay_ms=s.request_delay_ms if s.request_delay_ms is not None else d.request_delay_ms,
+                    request_delay_ms=_pick(s.request_delay_ms, d.request_delay_ms),
                 )
             )
         return resolved
