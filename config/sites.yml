@@ -5,17 +5,17 @@
 # WORDFENCE NOTE: Both sites run Wordfence which blocks IPs exceeding its
 # default 240 pages/min rate limit with HTTP 503.
 #
-# Rate limiting is now enforced at the HTTP-transport layer, meaning every
-# outbound request — including redirect follow-ups — counts against the gap.
-# WordPress typically chains 2–4 redirects per logical URL (http→https,
-# non-www→www, missing-slash→trailing-slash), so the effective Wordfence
-# hit-rate is 3–4× the logical URL rate. Account for this by setting
-# request_delay_ms conservatively:
+# Rate limiting is enforced at the HTTP-transport layer, so every outbound
+# request — including any redirect follow-ups — counts against the gap.
+# Sitemaps normally emit canonical URLs (so redirect amplification is low),
+# which means request_delay_ms maps almost directly to HTTP req/min.
 #
-#   request_delay_ms: 1500  →  ~40 logical req/min  →  ~120–160 HTTP req/min
-#   request_delay_ms: 3000  →  ~20 logical req/min  →  ~60–80  HTTP req/min  (safer)
+#   request_delay_ms: 500   →  ~120 HTTP req/min  (half of Wordfence 240/min)   ✓ safe
+#   request_delay_ms: 1000  →  ~60  HTTP req/min                                 ✓ very safe
+#   request_delay_ms: 250   →  ~240 HTTP req/min                                 ⚠ at threshold
 #
-# The config below targets ~40 logical req/min per site (well below 240/min).
+# Budget:  uem has ~3,162 URLs  → @ 500 ms ≈ 26 min; @ 1000 ms ≈ 53 min.
+# Sites run in parallel, so total wall time ≈ max(site durations).
 
 defaults:
   fetcher: httpx
@@ -31,11 +31,11 @@ sites:
       - https://iem.edu.in/sitemap_index.xml
       - https://iem.edu.in/sitemap.xml        # fallback if index not present
     concurrency: 2
-    request_delay_ms: 1500                    # ~40 logical req/min including redirects
+    request_delay_ms: 500                     # ~120 HTTP req/min — half of Wordfence 240/min
 
   - name: uem
     sitemap_urls:
       - https://uem.edu.in/sitemap_index.xml
       - https://uem.edu.in/sitemap.xml        # fallback if index not present
     concurrency: 2
-    request_delay_ms: 1500                    # ~40 logical req/min including redirects
+    request_delay_ms: 500                     # ~120 HTTP req/min — half of Wordfence 240/min

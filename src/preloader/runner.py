@@ -86,7 +86,6 @@ async def run(sites: list[ResolvedSite], dry_run: bool = False) -> list[SiteRepo
             logger.exception("[%s] unrecoverable error", site.name)
             return SiteReport(name=site.name, errors=[(site.name, f"{type(e).__name__}: {e}")])
 
-    reports: list[SiteReport] = []
-    for site in sites:
-        reports.append(await _safe(site))
-    return reports
+    # Sites run in parallel — each site's Wordfence / WAF rate limit is independent,
+    # and the per-site RateLimitedTransport in HttpxFetcher prevents per-site overrun.
+    return list(await asyncio.gather(*(_safe(s) for s in sites)))

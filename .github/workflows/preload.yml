@@ -2,7 +2,7 @@ name: Cloudflare Cache Preload
 
 on:
   schedule:
-    - cron: "*/30 * * * *"          # every 30 minutes
+    - cron: "0 * * * *"             # every hour (uem needs ~26 min at 500 ms delay)
   workflow_dispatch:
     inputs:
       site:
@@ -28,7 +28,7 @@ concurrency:
 jobs:
   preload:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
 
