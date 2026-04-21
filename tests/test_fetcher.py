@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import time as _time
+
 import httpx
 import pytest
 import respx
 
 from preloader.config import Config
-from preloader.fetcher import HttpxFetcher
+from preloader.fetcher import HttpxFetcher, RateLimitedTransport
 
 
 def _site():
@@ -73,3 +75,25 @@ async def test_timeout_retries_then_fails() -> None:
     assert route.call_count == 2  # retry_attempts=1 → 2 total attempts
     assert r.status_code is None
     assert r.error and "ConnectTimeout" in r.error
+
+
+@pytest.mark.asyncio
+async def test_rate_limited_transport_enforces_gap() -> None:
+    """Each request through RateLimitedTransport must be separated by at least min_gap."""
+    timestamps: list[float] = []
+    min_gap = 0.05  # 50 ms
+
+    class _RecordingTransport(httpx.AsyncBaseTransport):
+        async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+            timestamps.append(_time.monotonic())
+            return httpx.Response(200)
+
+    transport = RateLimitedTransport(_RecordingTransport(), min_gap_s=min_gap)
+    async with httpx.AsyncClient(transport=transport) as client:
+        for path in ("/a", "/b", "/c"):
+            await client.get(f"https://example.com{path}")
+
+    assert len(timestamps) == 3
+    tolerance = 0.01  # allow 10 ms clock jitter
+    assert timestamps[1] - timestamps[0] >= min_gap - tolerance
+    assert timestamps[2] - timestamps[1] >= min_gap - tolerance

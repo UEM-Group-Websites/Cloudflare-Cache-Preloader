@@ -13,6 +13,32 @@ from preloader.config import ResolvedSite
 logger = logging.getLogger(__name__)
 
 
+class RateLimitedTransport(httpx.AsyncBaseTransport):
+    """Wraps an httpx transport and enforces a minimum gap between every outbound HTTP
+    request — including redirect follow-ups — so rate-limiting fires at the HTTP layer
+    rather than only once per logical URL."""
+
+    def __init__(self, inner: httpx.AsyncBaseTransport, min_gap_s: float) -> None:
+        self._inner = inner
+        self._min_gap = min_gap_s
+        self._lock = asyncio.Lock()
+        self._last: float = 0.0
+
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        if self._min_gap > 0:
+            async with self._lock:
+                loop = asyncio.get_running_loop()
+                now = loop.time()
+                wait = self._last + self._min_gap - now
+                if wait > 0:
+                    await asyncio.sleep(wait)
+                self._last = loop.time()
+        return await self._inner.handle_async_request(request)
+
+    async def aclose(self) -> None:
+        await self._inner.aclose()
+
+
 @dataclass
 class FetchResult:
     url: str
@@ -40,8 +66,10 @@ def _bucket_status(raw: str | None) -> str:
 class HttpxFetcher:
     def __init__(self, site: ResolvedSite) -> None:
         self.site = site
+        min_gap = site.request_delay_ms / 1000.0
+        transport = RateLimitedTransport(httpx.AsyncHTTPTransport(http2=True), min_gap)
         self._client = httpx.AsyncClient(
-            http2=True,
+            transport=transport,
             timeout=site.timeout_seconds,
             headers=site.headers,
             follow_redirects=True,

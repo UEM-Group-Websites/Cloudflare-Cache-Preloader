@@ -2,14 +2,16 @@
 #
 # WORDFENCE RATE LIMITING
 # Wordfence's default "Block immediately" threshold is 240 pages/min per IP.
-# The rate gate in the preloader fires one request every `request_delay_ms` ms
-# (globally per site, not per worker), giving an effective rate of:
-#   1000 / request_delay_ms  req/s  ×  60  =  req/min
-# Examples:
-#   600 ms → 100 req/min  ✓ safe
-#   250 ms → 240 req/min  ⚠ borderline
-#   100 ms → 600 req/min  ✗ blocked
-# For WordPress + Wordfence sites keep request_delay_ms ≥ 500.
+# Rate limiting is enforced at the HTTP-transport layer, so every outbound
+# request — including redirect follow-ups — counts against the gap.
+# WordPress typically chains 2–4 redirects per URL, so the effective server
+# hit-rate is 3–4× the logical URL rate. Rule of thumb:
+#
+#   request_delay_ms: 1500  →  ~40 logical req/min  →  ~120–160 HTTP req/min  ✓ safe
+#   request_delay_ms: 600   →  ~100 logical req/min →  ~300–400 HTTP req/min  ✗ blocked
+#   request_delay_ms: 3000  →  ~20 logical req/min  →  ~60–80  HTTP req/min   ✓✓ very safe
+#
+# For WordPress + Wordfence sites keep request_delay_ms ≥ 1500.
 
 defaults:
   fetcher: httpx                     # httpx | playwright
@@ -20,12 +22,12 @@ defaults:
     Accept-Encoding: "gzip, deflate"
     Sec-Fetch-Dest: "document"
     Sec-Fetch-Mode: "navigate"
-  concurrency: 3                     # max in-flight requests per site
+  concurrency: 3                     # max in-flight logical URLs per site
   timeout_seconds: 20
   retry_attempts: 2
   max_urls_per_site: 5000
   sitemap_url_filters: []            # optional regex allow-list applied to discovered URLs
-  request_delay_ms: 250              # min ms between request starts (global per site)
+  request_delay_ms: 250              # min ms between HTTP requests (incl. redirects)
 
 sites:
   - name: example-blog
@@ -39,14 +41,14 @@ sites:
       - https://wp.example.com/sitemap_index.xml
       - https://wp.example.com/sitemap.xml     # fallback if index absent
     concurrency: 2
-    request_delay_ms: 600            # ~100 req/min, well under Wordfence limit
+    request_delay_ms: 1500           # ~40 logical req/min (~120–160 HTTP req/min with redirects)
 
   - name: protected-site
     sitemap_urls:
       - https://protected.example.com/sitemap.xml
     fetcher: playwright              # opt-in browser fetch for strict bot-check sites
     concurrency: 2
-    request_delay_ms: 800
+    request_delay_ms: 1500
     headers:
       Referer: https://protected.example.com/
       Authorization: "Bearer ${MY_TOKEN}"   # ${ENV_VAR} interpolation

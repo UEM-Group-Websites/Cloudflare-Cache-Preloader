@@ -56,23 +56,11 @@ async def _run_site(site: ResolvedSite, dry_run: bool) -> SiteReport:
     fetcher = make_fetcher(site)
     sem = asyncio.Semaphore(site.concurrency)
 
-    # Serialise request *starts* so exactly one request begins every
-    # request_delay_ms milliseconds, regardless of how many workers are
-    # in flight. This keeps the server-visible request rate at
-    # 1000/request_delay_ms req/s — critical for Wordfence rate limits.
-    gate = asyncio.Lock()
-    min_gap = site.request_delay_ms / 1000.0
-    # Initialise to (now - gap) so the very first request fires immediately.
-    _last_start: list[float] = [asyncio.get_event_loop().time() - min_gap]
-
+    # Rate limiting is enforced at the HTTP-transport layer (RateLimitedTransport)
+    # so every outbound request — including redirect follow-ups — respects the gap.
+    # The semaphore here only caps the number of in-flight logical URLs.
     async def _bounded(url: str) -> FetchResult:
         async with sem:
-            async with gate:
-                now = asyncio.get_event_loop().time()
-                wait = _last_start[0] + min_gap - now
-                if wait > 0:
-                    await asyncio.sleep(wait)
-                _last_start[0] = asyncio.get_event_loop().time()
             return await fetcher.fetch(url)
 
     try:
@@ -98,4 +86,7 @@ async def run(sites: list[ResolvedSite], dry_run: bool = False) -> list[SiteRepo
             logger.exception("[%s] unrecoverable error", site.name)
             return SiteReport(name=site.name, errors=[(site.name, f"{type(e).__name__}: {e}")])
 
-    return list(await asyncio.gather(*(_safe(s) for s in sites)))
+    reports: list[SiteReport] = []
+    for site in sites:
+        reports.append(await _safe(site))
+    return reports
