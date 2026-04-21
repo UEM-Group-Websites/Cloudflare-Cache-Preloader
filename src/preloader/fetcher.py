@@ -175,7 +175,7 @@ class PlaywrightFetcher:
 
 
 def make_fetcher(site: ResolvedSite) -> Fetcher:
-    if site.fetcher in ("httpx", "httpx_impersonate"):
+    if site.fetcher == "httpx":
         # NOTE: httpx_impersonate is a placeholder; v1 uses plain httpx with browser headers.
         return HttpxFetcher(site)
     if site.fetcher == "playwright":
