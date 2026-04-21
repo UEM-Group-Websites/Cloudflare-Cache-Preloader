@@ -2,7 +2,7 @@
 # Run locally:  uv run python -m preloader --config config/sites.yml --dry-run
 # Run a single site:  uv run python -m preloader --config config/sites.yml --site iem
 #
-# WORDFENCE NOTE: Both sites run Wordfence which blocks IPs exceeding its
+# WORDFENCE NOTE: Both sites run Wordfence, which blocks IPs exceeding its
 # default 240 pages/min rate limit with HTTP 503.
 #
 # Rate limiting is enforced at the HTTP-transport layer, so every outbound
@@ -14,7 +14,7 @@
 #   request_delay_ms: 1000  →  ~60  HTTP req/min                                 ✓ very safe
 #   request_delay_ms: 250   →  ~240 HTTP req/min                                 ⚠ at threshold
 #
-# Budget:  uem has ~3,162 URLs  → @ 500 ms ≈ 26 min; @ 1000 ms ≈ 53 min.
+# Budget:  UEM has ~3,162 URLs  → @ 500 ms ≈ 26 min; @ 1000 ms ≈ 53 min.
 # Sites run in parallel, so total wall time ≈ max(site durations).
 
 defaults:
@@ -26,14 +26,15 @@ defaults:
   request_delay_ms: 250
 
 sites:
-  - name: iem
-    sitemap_urls:
-      - https://iem.edu.in/sitemap_index.xml
-      - https://iem.edu.in/sitemap.xml        # fallback if index not present
-    concurrency: 2
-    request_delay_ms: 500                     # ~120 HTTP req/min — half of Wordfence 240/min
+  # Disabling IEM website temporarily, till Cloudflare APO is re-enabled
+  # - name: "IEM Website"
+  #   sitemap_urls:
+  #     - https://iem.edu.in/sitemap_index.xml
+  #     - https://iem.edu.in/sitemap.xml        # fallback if index not present
+  #   concurrency: 2
+  #   request_delay_ms: 500                     # ~120 HTTP req/min — half of Wordfence 240/min
 
-  - name: uem
+  - name: "UEM Website"
     sitemap_urls:
       - https://uem.edu.in/sitemap_index.xml
       - https://uem.edu.in/sitemap.xml        # fallback if index not present
