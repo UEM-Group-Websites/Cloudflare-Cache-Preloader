@@ -22,7 +22,7 @@ uv run pytest -q
 
 GitHub Actions:
 
-- Cron: every 30 minutes, plus manual `workflow_dispatch` (with optional `site` and `dry_run` inputs).
+- Cron: hourly, plus manual `workflow_dispatch` (with optional `site` and `dry_run` inputs).
 - See `.github/workflows/preload.yml`.
 
 ## Configuration
