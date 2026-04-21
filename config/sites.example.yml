@@ -27,7 +27,7 @@ defaults:
   retry_attempts: 2
   max_urls_per_site: 5000
   sitemap_url_filters: []            # optional regex allow-list applied to discovered URLs
-  request_delay_ms: 250              # min ms between HTTP requests (incl. redirects)
+  request_delay_ms: 250              # generic/non-Wordfence default; override to >=1500 for WordPress+Wordfence
 
 sites:
   - name: example-blog
