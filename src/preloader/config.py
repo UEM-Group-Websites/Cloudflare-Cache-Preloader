@@ -113,7 +113,6 @@ class Config(BaseModel):
                 merged_headers.update(s.headers)
             # Always inject User-Agent into headers for the fetcher.
             ua = s.user_agent or d.user_agent
-            merged_headers.setdefault("User-Agent", ua)
             merged_headers["User-Agent"] = ua
 
             filters_raw = s.sitemap_url_filters if s.sitemap_url_filters is not None else d.sitemap_url_filters
