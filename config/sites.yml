@@ -1,0 +1,41 @@
+# Cloudflare Cache Preloader — site configuration.
+# Run locally:  uv run python -m preloader --config config/sites.yml --dry-run
+# Run a single site:  uv run python -m preloader --config config/sites.yml --site iem
+#
+# WORDFENCE NOTE: Both sites run Wordfence which blocks IPs exceeding its
+# default 240 pages/min rate limit with HTTP 503.
+#
+# Rate limiting is enforced at the HTTP-transport layer, so every outbound
+# request — including any redirect follow-ups — counts against the gap.
+# Sitemaps normally emit canonical URLs (so redirect amplification is low),
+# which means request_delay_ms maps almost directly to HTTP req/min.
+#
+#   request_delay_ms: 500   →  ~120 HTTP req/min  (half of Wordfence 240/min)   ✓ safe
+#   request_delay_ms: 1000  →  ~60  HTTP req/min                                 ✓ very safe
+#   request_delay_ms: 250   →  ~240 HTTP req/min                                 ⚠ at threshold
+#
+# Budget:  uem has ~3,162 URLs  → @ 500 ms ≈ 26 min; @ 1000 ms ≈ 53 min.
+# Sites run in parallel, so total wall time ≈ max(site durations).
+
+defaults:
+  fetcher: httpx
+  concurrency: 3
+  timeout_seconds: 20
+  retry_attempts: 2
+  max_urls_per_site: 5000
+  request_delay_ms: 250
+
+sites:
+  - name: iem
+    sitemap_urls:
+      - https://iem.edu.in/sitemap_index.xml
+      - https://iem.edu.in/sitemap.xml        # fallback if index not present
+    concurrency: 2
+    request_delay_ms: 500                     # ~120 HTTP req/min — half of Wordfence 240/min
+
+  - name: uem
+    sitemap_urls:
+      - https://uem.edu.in/sitemap_index.xml
+      - https://uem.edu.in/sitemap.xml        # fallback if index not present
+    concurrency: 2
+    request_delay_ms: 500                     # ~120 HTTP req/min — half of Wordfence 240/min

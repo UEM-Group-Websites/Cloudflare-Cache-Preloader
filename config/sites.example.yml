@@ -1,0 +1,56 @@
+# Example showing every supported config knob.
+#
+# WORDFENCE RATE LIMITING
+# Wordfence's default "Block immediately" threshold is 240 pages/min per IP.
+# Rate limiting is enforced at the HTTP-transport layer, so every outbound
+# request — including redirect follow-ups — counts against the gap.
+# WordPress typically chains 2–4 redirects per URL, so the effective server
+# hit-rate is 3–4× the logical URL rate. Rule of thumb:
+#
+#   request_delay_ms: 1500  →  ~40 logical req/min  →  ~120–160 HTTP req/min  ✓ safe
+#   request_delay_ms: 600   →  ~100 logical req/min →  ~300–400 HTTP req/min  ✗ blocked
+#   request_delay_ms: 3000  →  ~20 logical req/min  →  ~60–80  HTTP req/min   ✓✓ very safe
+#
+# For WordPress + Wordfence sites keep request_delay_ms ≥ 1500.
+
+defaults:
+  fetcher: httpx                     # httpx | playwright
+  user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+  headers:
+    Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8"
+    Accept-Language: "en-US,en;q=0.9"
+    Accept-Encoding: "gzip, deflate"
+    Sec-Fetch-Dest: "document"
+    Sec-Fetch-Mode: "navigate"
+  concurrency: 3                     # max in-flight logical URLs per site
+  timeout_seconds: 20
+  retry_attempts: 2
+  max_urls_per_site: 5000
+  sitemap_url_filters: []            # optional regex allow-list applied to discovered URLs
+  request_delay_ms: 250              # min ms between HTTP requests (incl. redirects)
+
+sites:
+  - name: example-blog
+    sitemap_urls:
+      - https://example.com/sitemap_index.xml  # Yoast SEO (WordPress default)
+    concurrency: 5
+    request_delay_ms: 150            # non-Wordfence site — can go faster
+
+  - name: wordpress-wordfence-site
+    sitemap_urls:
+      - https://wp.example.com/sitemap_index.xml
+      - https://wp.example.com/sitemap.xml     # fallback if index absent
+    concurrency: 2
+    request_delay_ms: 1500           # ~40 logical req/min (~120–160 HTTP req/min with redirects)
+
+  - name: protected-site
+    sitemap_urls:
+      - https://protected.example.com/sitemap.xml
+    fetcher: playwright              # opt-in browser fetch for strict bot-check sites
+    concurrency: 2
+    request_delay_ms: 1500
+    headers:
+      Referer: https://protected.example.com/
+      Authorization: "Bearer ${MY_TOKEN}"   # ${ENV_VAR} interpolation
+    sitemap_url_filters:
+      - "^https://protected\\.example\\.com/(blog|docs)/"
