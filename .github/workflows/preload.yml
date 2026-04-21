@@ -19,6 +19,9 @@ concurrency:
   group: cache-preload
   cancel-in-progress: false
 
+permissions:
+  contents: read
+
 jobs:
   preload:
     runs-on: ubuntu-latest
