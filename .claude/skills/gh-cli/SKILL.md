@@ -1490,7 +1490,7 @@ gh release upload v1.0.0 ./file.tar.gz
 gh release upload v1.0.0 ./file1.tar.gz ./file2.tar.gz
 
 # Upload with label (casing sensitive)
-gh release upload v1.0.0 ./file.tar.gz --casing
+gh release upload v1.0.0 ./file.tar.gz
 
 # Delete release
 gh release delete v1.0.0
