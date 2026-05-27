@@ -15,7 +15,7 @@ playwright = ["playwright>=1.59.0"]
 impersonate = ["curl_cffi>=0.7"]
 dev = [
     "pytest>=8.0",
-    "pytest-asyncio>=0.23",
+    "pytest-asyncio>=1.4.0",
     "respx>=0.21",
     "ruff>=0.15.12",
 ]
