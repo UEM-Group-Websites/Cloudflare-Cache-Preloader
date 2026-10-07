@@ -49,6 +49,7 @@ async def test_without_budget_fetches_everything(slow_fetcher: _SlowFetcher) -> 
     [report] = await runner.run([_site(None)])
     assert report.fetched == len(URLS)
     assert report.budget_skipped == 0
+    assert not report.budget_exhausted
     assert slow_fetcher.closed
 
 
@@ -61,6 +62,22 @@ async def test_budget_stops_fetching_and_reports_partial_results(slow_fetcher: _
     assert report.errors == []
     assert report.elapsed_s < 0.2
     assert slow_fetcher.closed
+    assert report.budget_exhausted
+
+
+async def test_budget_also_bounds_sitemap_discovery(
+    slow_fetcher: _SlowFetcher, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def _hanging_discover(*_args, **_kwargs) -> SitemapResult:
+        await asyncio.sleep(10)
+        return SitemapResult(urls=list(URLS))
+
+    monkeypatch.setattr(runner, "discover_urls", _hanging_discover)
+    [report] = await runner.run([_site(0.1)])
+    assert report.budget_exhausted
+    assert report.fetched == 0
+    assert report.elapsed_s < 0.2
+    assert report.sitemap_errors == [("https://e/s.xml", "time budget reached during sitemap discovery")]
 
 
 def test_site_overrides_default_budget() -> None:

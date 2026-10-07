@@ -50,13 +50,17 @@ def test_render_handles_zero_fetched() -> None:
 
 def test_render_flags_sites_that_ran_out_of_time() -> None:
     reports = [
-        SiteReport(name="slow", discovered=3295, fetched=2100, budget_skipped=1195, elapsed_s=2400.0),
+        SiteReport(
+            name="slow", discovered=3295, fetched=2100, budget_skipped=1195, budget_exhausted=True, elapsed_s=2400.0
+        ),
+        SiteReport(name="stuck", budget_exhausted=True, elapsed_s=2400.0),
         SiteReport(name="fast", discovered=10, fetched=10, elapsed_s=5.0),
     ]
     body = render(reports, now=dt.datetime(2026, 4, 20, tzinfo=dt.UTC))
     assert "## Time budget reached" in body
     assert "**slow** — stopped after 40m 0s; 1,195 of 3,295 URLs not fetched" in body
     assert "**fast**" not in body
+    assert "**stuck** — stopped during sitemap discovery after 40m 0s" in body
 
 
 def test_render_omits_budget_section_when_all_sites_finish() -> None:
