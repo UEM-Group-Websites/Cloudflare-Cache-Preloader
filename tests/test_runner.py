@@ -98,3 +98,12 @@ def test_site_overrides_default_budget() -> None:
 def test_budget_must_be_positive() -> None:
     with pytest.raises(ValueError):
         Config.model_validate({"defaults": {"time_budget_seconds": 0}, "sites": [{"name": "a", "sitemap_urls": ["x"]}]})
+
+
+async def test_logs_progress_per_fetched_url(slow_fetcher: _SlowFetcher, caplog: pytest.LogCaptureFixture) -> None:
+    caplog.set_level("INFO", logger="preloader.runner")
+    await runner.run([_site(None)])
+    progress = [m for m in caplog.messages if "/10]" in m]
+    assert len(progress) == len(URLS)
+    assert progress[0].startswith("[t] [ 1/10] 200 HIT ")
+    assert progress[-1].startswith("[t] [10/10] 200 HIT ")

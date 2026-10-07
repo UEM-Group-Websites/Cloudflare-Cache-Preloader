@@ -80,9 +80,28 @@ async def _run_site(site: ResolvedSite, dry_run: bool) -> SiteReport:
     # Rate limiting is enforced at the HTTP-transport layer (RateLimitedTransport)
     # so every outbound request — including redirect follow-ups — respects the gap.
     # The semaphore here only caps the number of in-flight logical URLs.
+    # Progress counts completions, not submissions, so [n/total] climbs steadily even with concurrency > 1.
+    completed = 0
+    width = len(str(report.discovered))
+
     async def _bounded(url: str) -> FetchResult:
+        nonlocal completed
         async with sem:
-            return await fetcher.fetch(url)
+            r = await fetcher.fetch(url)
+        completed += 1
+        logger.info(
+            "[%s] [%*d/%d] %s %s %dms %s%s",
+            site.name,
+            width,
+            completed,
+            report.discovered,
+            r.status_code if r.status_code is not None else "ERR",
+            r.cf_cache_status,
+            r.elapsed_ms,
+            r.url,
+            f" — {r.error}" if r.error else "",
+        )
+        return r
 
     tasks = [asyncio.create_task(_bounded(u)) for u in sm.urls]
     try:
