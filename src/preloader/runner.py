@@ -25,6 +25,7 @@ class SiteReport:
     sitemap_errors: list[tuple[str, str]] = field(default_factory=list)
     elapsed_s: float = 0.0
     skipped: bool = False
+    budget_skipped: int = 0  # URLs left unfetched because the site's time budget ran out
 
 
 async def _run_site(site: ResolvedSite, dry_run: bool) -> SiteReport:
@@ -63,10 +64,30 @@ async def _run_site(site: ResolvedSite, dry_run: bool) -> SiteReport:
         async with sem:
             return await fetcher.fetch(url)
 
+    # The time budget covers discovery too, so it maps directly onto the job's wall clock.
+    remaining: float | None = None
+    if site.time_budget_seconds is not None:
+        remaining = max(0.0, site.time_budget_seconds - (time.monotonic() - start))
+
+    tasks = [asyncio.create_task(_bounded(u)) for u in sm.urls]
     try:
-        results = await asyncio.gather(*(_bounded(u) for u in sm.urls))
+        done, pending = await asyncio.wait(tasks, timeout=remaining)
+        for t in pending:
+            t.cancel()
+        await asyncio.gather(*pending, return_exceptions=True)
     finally:
         await fetcher.aclose()
+
+    results = [t.result() for t in tasks if t in done]
+    report.budget_skipped = len(pending)
+    if pending:
+        logger.warning(
+            "[%s] time budget of %ds reached — skipped %d of %d URLs",
+            site.name,
+            site.time_budget_seconds,
+            len(pending),
+            report.discovered,
+        )
 
     for r in results:
         report.fetched += 1

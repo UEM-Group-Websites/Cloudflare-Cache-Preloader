@@ -84,6 +84,17 @@ def render(reports: list[SiteReport], now: dt.datetime | None = None) -> str:
 
     lines.append("")
 
+    budget_sites = [r for r in reports if r.budget_skipped]
+    if budget_sites:
+        lines.append("## Time budget reached")
+        lines.append("")
+        for r in budget_sites:
+            lines.append(
+                f"- **{r.name}** — stopped after {_fmt_duration(r.elapsed_s)}; "
+                f"{r.budget_skipped:,} of {r.discovered:,} URLs not fetched"
+            )
+        lines.append("")
+
     sitemap_problem_sites = [r for r in reports if r.sitemap_errors]
     if sitemap_problem_sites:
         lines.append("## Sitemap warnings")
