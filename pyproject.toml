@@ -38,6 +38,7 @@ markers = ["live: hits real network; opt-in"]
 [tool.ruff]
 line-length = 120
 target-version = "py311"
+extend-exclude = [".claude"]  # vendored skills, pinned by skills-lock.json
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]

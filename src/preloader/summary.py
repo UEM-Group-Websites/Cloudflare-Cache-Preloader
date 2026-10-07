@@ -30,11 +30,7 @@ def render(reports: list[SiteReport], now: dt.datetime | None = None) -> str:
     lines.append(f"# Cloudflare Cache Preload — {now.strftime('%Y-%m-%d %H:%M UTC')}")
     lines.append("")
 
-    header = (
-        "| Site | Discovered | Fetched | "
-        + " | ".join(PRIMARY_COLS)
-        + " | Other | HIT% | Errors | Duration |"
-    )
+    header = "| Site | Discovered | Fetched | " + " | ".join(PRIMARY_COLS) + " | Other | HIT% | Errors | Duration |"
     sep = "|---|" + "---:|" * (len(PRIMARY_COLS) + 6)
     lines.append(header)
     lines.append(sep)

@@ -25,9 +25,7 @@ async def test_flat_urlset(fx_urlset: bytes) -> None:
 
 @pytest.mark.asyncio
 @respx.mock
-async def test_nested_index_with_gzip(
-    fx_sitemapindex: bytes, fx_sub1: bytes, fx_sub2_gz: bytes
-) -> None:
+async def test_nested_index_with_gzip(fx_sitemapindex: bytes, fx_sub1: bytes, fx_sub2_gz: bytes) -> None:
     respx.get("https://example.com/index.xml").mock(return_value=httpx.Response(200, content=fx_sitemapindex))
     respx.get("https://example.com/sub1.xml").mock(return_value=httpx.Response(200, content=fx_sub1))
     respx.get("https://example.com/sub2.xml.gz").mock(return_value=httpx.Response(200, content=fx_sub2_gz))

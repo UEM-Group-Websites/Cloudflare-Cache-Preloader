@@ -84,10 +84,7 @@ async def _walk(
             sub_urls.append(loc_el.text.strip())
         if sub_urls:
             await asyncio.gather(
-                *(
-                    _walk(client, u, depth + 1, seen_sitemaps, out, filters, max_urls)
-                    for u in sub_urls
-                )
+                *(_walk(client, u, depth + 1, seen_sitemaps, out, filters, max_urls) for u in sub_urls)
             )
     elif tag == "urlset":
         for u in root:

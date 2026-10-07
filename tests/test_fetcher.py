@@ -23,9 +23,7 @@ def _site():
 @pytest.mark.asyncio
 @respx.mock
 async def test_success_extracts_cf_status() -> None:
-    respx.get("https://example.com/page").mock(
-        return_value=httpx.Response(200, headers={"cf-cache-status": "HIT"})
-    )
+    respx.get("https://example.com/page").mock(return_value=httpx.Response(200, headers={"cf-cache-status": "HIT"}))
     f = HttpxFetcher(_site())
     try:
         r = await f.fetch("https://example.com/page")
