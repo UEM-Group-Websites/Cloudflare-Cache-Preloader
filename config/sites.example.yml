@@ -28,6 +28,7 @@ defaults:
   max_urls_per_site: 5000
   sitemap_url_filters: []            # optional regex allow-list applied to discovered URLs
   request_delay_ms: 250              # generic/non-Wordfence default; override to >=1500 for WordPress+Wordfence
+  time_budget_seconds: 2400          # optional per-site wall-clock cap; skips remaining URLs and still reports
 
 sites:
   - name: example-blog

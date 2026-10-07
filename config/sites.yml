@@ -14,7 +14,16 @@
 #   request_delay_ms: 1000  →  ~60  HTTP req/min                                 ✓ very safe
 #   request_delay_ms: 250   →  ~240 HTTP req/min                                 ⚠ at threshold
 #
-# Budget:  UEM has ~3,162 URLs  → @ 500 ms ≈ 26 min; @ 1000 ms ≈ 53 min.
+# Throughput is the lower of two limits:
+#   - the request gap:   60 / (request_delay_ms / 1000)          → 120 req/min at 500 ms
+#   - origin latency:    concurrency × 60 / response time         → cache MISSes wait on
+#     WordPress (~3.5 s UEM, ~2 s IEM), so concurrency 2 managed only ~34 req/min on misses
+#     and runs with >~700 MISSes blew the 45-min job timeout.
+# With concurrency 6, misses run at ~100 req/min, so UEM's ~3,300 URLs take ~28 min warm
+# and ~33 min fully cold. The request gap still caps Wordfence exposure at 120/min.
+#
+# time_budget_seconds stops a site cleanly before the job's timeout-minutes (45) so the
+# summary is still written; unfetched URLs are listed under "Time budget reached".
 # Sites run in parallel, so total wall time ≈ max(site durations).
 
 defaults:
@@ -24,18 +33,19 @@ defaults:
   retry_attempts: 2
   max_urls_per_site: 5000
   request_delay_ms: 250
+  time_budget_seconds: 2400                   # 40 min — leaves headroom under the 45-min job timeout
 
 sites:
   - name: "IEM Website"
     sitemap_urls:
       - https://iem.edu.in/sitemap_index.xml
       - https://iem.edu.in/sitemap.xml        # fallback if index not present
-    concurrency: 2
+    concurrency: 6                            # in-flight URLs; keeps MISS-heavy runs off the timeout
     request_delay_ms: 500                     # ~120 HTTP req/min — half of Wordfence 240/min
 
   - name: "UEM Website"
     sitemap_urls:
       - https://uem.edu.in/sitemap_index.xml
       - https://uem.edu.in/sitemap.xml        # fallback if index not present
-    concurrency: 2
+    concurrency: 6                            # in-flight URLs; keeps MISS-heavy runs off the timeout
     request_delay_ms: 500                     # ~120 HTTP req/min — half of Wordfence 240/min

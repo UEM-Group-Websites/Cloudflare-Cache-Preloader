@@ -30,11 +30,7 @@ def render(reports: list[SiteReport], now: dt.datetime | None = None) -> str:
     lines.append(f"# Cloudflare Cache Preload — {now.strftime('%Y-%m-%d %H:%M UTC')}")
     lines.append("")
 
-    header = (
-        "| Site | Discovered | Fetched | "
-        + " | ".join(PRIMARY_COLS)
-        + " | Other | HIT% | Errors | Duration |"
-    )
+    header = "| Site | Discovered | Fetched | " + " | ".join(PRIMARY_COLS) + " | Other | HIT% | Errors | Duration |"
     sep = "|---|" + "---:|" * (len(PRIMARY_COLS) + 6)
     lines.append(header)
     lines.append(sep)
@@ -83,6 +79,19 @@ def render(reports: list[SiteReport], now: dt.datetime | None = None) -> str:
         lines.append("| " + " | ".join(cells) + " |")
 
     lines.append("")
+
+    budget_sites = [r for r in reports if r.budget_exhausted]
+    if budget_sites:
+        lines.append("## Time budget reached")
+        lines.append("")
+        for r in budget_sites:
+            elapsed = _fmt_duration(r.elapsed_s)
+            if r.budget_skipped:
+                detail = f"stopped after {elapsed}; {r.budget_skipped:,} of {r.discovered:,} URLs not fetched"
+            else:
+                detail = f"stopped during sitemap discovery after {elapsed}; no URLs fetched"
+            lines.append(f"- **{r.name}** — {detail}")
+        lines.append("")
 
     sitemap_problem_sites = [r for r in reports if r.sitemap_errors]
     if sitemap_problem_sites:

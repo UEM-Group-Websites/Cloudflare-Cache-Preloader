@@ -11,8 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 FetcherKind = Literal["httpx", "playwright"]
 
 DEFAULT_USER_AGENT = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 )
 
 DEFAULT_HEADERS: dict[str, str] = {
@@ -50,6 +49,9 @@ class Defaults(BaseModel):
     # 250 ms between requests per worker keeps ~12 req/s across 3 workers,
     # well under Wordfence's default 240 pages/min block threshold.
     request_delay_ms: int = 250
+    # Wall-clock cap per site (discovery + fetching). When it runs out, unfetched URLs are
+    # skipped and a partial report is still written. Keep it below the job's timeout-minutes.
+    time_budget_seconds: float | None = Field(default=None, gt=0)
 
     @field_validator("headers", mode="after")
     @classmethod
@@ -71,6 +73,7 @@ class Site(BaseModel):
     max_urls: int | None = None
     sitemap_url_filters: list[str] | None = None
     request_delay_ms: int | None = None
+    time_budget_seconds: float | None = Field(default=None, gt=0)
 
     @field_validator("headers", mode="after")
     @classmethod
@@ -96,6 +99,7 @@ class ResolvedSite(BaseModel):
     max_urls: int
     sitemap_url_filters: list[re.Pattern[str]]
     request_delay_ms: int
+    time_budget_seconds: float | None
 
 
 class Config(BaseModel):
@@ -134,6 +138,7 @@ class Config(BaseModel):
                     max_urls=_pick(s.max_urls, d.max_urls_per_site),
                     sitemap_url_filters=filters,
                     request_delay_ms=_pick(s.request_delay_ms, d.request_delay_ms),
+                    time_budget_seconds=_pick(s.time_budget_seconds, d.time_budget_seconds),
                 )
             )
         return resolved
