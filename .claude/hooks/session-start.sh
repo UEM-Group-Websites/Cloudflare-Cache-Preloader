@@ -9,7 +9,8 @@ fi
 cd "${CLAUDE_PROJECT_DIR:-$(dirname "$0")/../..}"
 
 if ! command -v uv >/dev/null 2>&1; then
-  curl -LsSf https://astral.sh/uv/install.sh | sh
+  # Pinned release from PyPI rather than piping a remote install script into sh.
+  python3 -m pip install --user --break-system-packages "uv==0.11.32"
   export PATH="$HOME/.local/bin:$PATH"
 fi
 
