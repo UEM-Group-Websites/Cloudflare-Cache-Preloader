@@ -25,20 +25,30 @@ class _SitemapError(Exception):
     """A sitemap that could not be fetched or decoded; the message goes into SitemapResult.errors."""
 
 
-def _maybe_gunzip(content: bytes, url: str, content_encoding: str | None) -> bytes:
-    gz_hinted = url.endswith(".gz") or (content_encoding and "gzip" in content_encoding.lower())
-    # httpx already decodes Content-Encoding: gzip, so only decompress real gzip data.
-    if gz_hinted and content[:2] == _GZIP_MAGIC:
-        try:
+def _too_large() -> _SitemapError:
+    return _SitemapError(f"sitemap too large (over {_MAX_SITEMAP_BYTES} bytes uncompressed)")
+
+
+def _maybe_gunzip(content: bytes) -> bytes:
+    """Decompress a gzip file served as-is (e.g. sitemap.xml.gz), member by member, under the size cap.
+    Content-Encoding: gzip never reaches here — httpx decodes it while streaming in _fetch_one."""
+    if content[:2] != _GZIP_MAGIC:
+        return content
+    out = bytearray()
+    data = content
+    try:
+        # A valid gzip file may hold several concatenated members.
+        while data[:2] == _GZIP_MAGIC:
             d = zlib.decompressobj(wbits=31)
-            content = d.decompress(content, _MAX_SITEMAP_BYTES + 1)
-            if not d.eof and len(content) <= _MAX_SITEMAP_BYTES:
+            out += d.decompress(data, _MAX_SITEMAP_BYTES + 1 - len(out))
+            if len(out) > _MAX_SITEMAP_BYTES:
+                raise _too_large()
+            if not d.eof:
                 raise EOFError("truncated gzip data")
-        except (OSError, EOFError, zlib.error) as e:
-            raise _SitemapError(f"gzip decompress failed: {e}") from e
-    if len(content) > _MAX_SITEMAP_BYTES:
-        raise _SitemapError(f"sitemap too large (over {_MAX_SITEMAP_BYTES} bytes uncompressed)")
-    return content
+            data = d.unused_data
+    except (EOFError, zlib.error) as e:
+        raise _SitemapError(f"gzip decompress failed: {e}") from e
+    return bytes(out)
 
 
 @dataclass
@@ -51,12 +61,21 @@ class SitemapResult:
 async def _fetch_one(client: httpx.AsyncClient, url: str) -> tuple[bytes, str]:
     """Return (body, final URL after redirects); raise _SitemapError on any fetch/decode failure."""
     try:
-        resp = await client.get(url, follow_redirects=True)
-        resp.raise_for_status()
+        async with client.stream("GET", url, follow_redirects=True) as resp:
+            resp.raise_for_status()
+            # Stream so the size cap also bounds Content-Encoding: gzip, which httpx decodes chunk by chunk.
+            chunks: list[bytes] = []
+            total = 0
+            async for chunk in resp.aiter_bytes():
+                total += len(chunk)
+                if total > _MAX_SITEMAP_BYTES:
+                    raise _too_large()
+                chunks.append(chunk)
+            final_url = str(resp.url)
     except (httpx.HTTPError, httpx.InvalidURL) as e:
         logger.warning("sitemap fetch failed: %s — %s", url, e)
         raise _SitemapError("fetch failed") from e
-    return _maybe_gunzip(resp.content, url, resp.headers.get("Content-Encoding")), str(resp.url)
+    return _maybe_gunzip(b"".join(chunks)), final_url
 
 
 async def _walk(
@@ -81,6 +100,8 @@ async def _walk(
         body, final_url = await _fetch_one(client, sitemap_url)
     except _SitemapError as e:
         out.errors.append((sitemap_url, str(e)))
+        # Forget the failure so a later fallback that redirects here can still be parsed.
+        seen_sitemaps.discard(sitemap_url)
         return
     if final_url != sitemap_url:
         if final_url in seen_sitemaps:
@@ -133,9 +154,11 @@ async def discover_urls(
     max_urls: int,
 ) -> SitemapResult:
     """Try sitemap_urls in order and use the first that yields any URLs; earlier failures are
-    only logged, and all errors are reported only if no entry yields URLs."""
+    only logged. Errors are reported only if no entry yields URLs and none parsed cleanly
+    (a valid but empty sitemap means there is legitimately nothing to fetch)."""
     seen: set[str] = set()
     failed: list[tuple[str, str]] = []
+    clean_empty = False
     for sm in sitemap_urls:
         out = SitemapResult()
         await _walk(client, sm, 1, seen, out, filters, max_urls)
@@ -143,5 +166,10 @@ async def discover_urls(
             for url, msg in failed:
                 logger.info("sitemap %s failed before fallback succeeded: %s", url, msg)
             return out
+        clean_empty = clean_empty or not out.errors
         failed.extend(out.errors)
+    if clean_empty:
+        for url, msg in failed:
+            logger.info("sitemap %s failed, but another entry parsed with no URLs: %s", url, msg)
+        return SitemapResult()
     return SitemapResult(errors=failed)

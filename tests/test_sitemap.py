@@ -249,3 +249,80 @@ async def test_redirect_alias_not_parsed_twice(monkeypatch: pytest.MonkeyPatch) 
     assert target.call_count == 2  # the alias redirect is still fetched
     assert len(parsed) == 2  # index + a.xml; the alias body is not parsed again
     assert result.errors == []
+
+
+@pytest.mark.asyncio
+async def test_content_encoding_bomb_is_capped_while_streaming(monkeypatch: pytest.MonkeyPatch) -> None:
+    import zlib
+
+    from preloader import sitemap
+
+    monkeypatch.setattr(sitemap, "_MAX_SITEMAP_BYTES", 1000)
+    # One gzip stream (served as Content-Encoding: gzip) split into many chunks; count how many get read.
+    comp = zlib.compressobj(wbits=31)
+    raw_chunks = [comp.compress(b" " * 10_000) + comp.flush(zlib.Z_SYNC_FLUSH) for _ in range(200)] + [comp.flush()]
+    consumed = 0
+
+    class _Stream(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            nonlocal consumed
+            for c in raw_chunks:
+                consumed += 1
+                yield c
+
+    # MockTransport hands the stream over lazily (respx would buffer it first).
+    transport = httpx.MockTransport(
+        lambda req: httpx.Response(200, headers={"Content-Encoding": "gzip"}, stream=_Stream())
+    )
+    async with httpx.AsyncClient(transport=transport) as c:
+        result = await discover_urls(c, ["https://example.com/s.xml"], [], 1000)
+    assert result.urls == []
+    assert any("too large" in msg for _, msg in result.errors)
+    assert consumed < len(raw_chunks)
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_multi_member_gzip_is_fully_decompressed() -> None:
+    import gzip
+
+    body = _urlset("a", "b")
+    half = len(body) // 2
+    respx.get("https://example.com/s.xml.gz").mock(
+        return_value=httpx.Response(200, content=gzip.compress(body[:half]) + gzip.compress(body[half:]))
+    )
+    async with httpx.AsyncClient() as c:
+        result = await discover_urls(c, ["https://example.com/s.xml.gz"], [], 1000)
+    assert result.urls == ["https://example.com/a", "https://example.com/b"]
+    assert result.errors == []
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_fallback_redirecting_to_previously_failed_url_is_parsed() -> None:
+    # Index fails on the first request, then the fallback redirects to it and it succeeds.
+    respx.get("https://example.com/sitemap_index.xml").mock(
+        side_effect=[httpx.Response(500), httpx.Response(200, content=_urlset("a"))]
+    )
+    respx.get("https://example.com/sitemap.xml").mock(
+        return_value=httpx.Response(301, headers={"Location": "https://example.com/sitemap_index.xml"})
+    )
+    async with httpx.AsyncClient(follow_redirects=True) as c:
+        result = await discover_urls(
+            c, ["https://example.com/sitemap_index.xml", "https://example.com/sitemap.xml"], [], 1000
+        )
+    assert result.urls == ["https://example.com/a"]
+    assert result.errors == []
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_cleanly_empty_sitemap_is_not_reported_as_failure() -> None:
+    respx.get("https://example.com/sitemap_index.xml").mock(return_value=httpx.Response(200, content=_urlset()))
+    respx.get("https://example.com/sitemap.xml").mock(return_value=httpx.Response(404))
+    async with httpx.AsyncClient() as c:
+        result = await discover_urls(
+            c, ["https://example.com/sitemap_index.xml", "https://example.com/sitemap.xml"], [], 1000
+        )
+    assert result.urls == []
+    assert result.errors == []
