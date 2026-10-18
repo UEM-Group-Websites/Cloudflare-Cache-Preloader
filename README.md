@@ -16,7 +16,7 @@ Local dev:
 ```bash
 uv sync --extra dev
 uv run python -m preloader --config config/sites.yml --dry-run     # discover URLs only
-uv run python -m preloader --config config/sites.yml --site iem    # run one site
+uv run python -m preloader --config config/sites.yml --site "IEM Website"    # run one site (exact name)
 uv run pytest -q
 ```
 
@@ -34,14 +34,15 @@ Minimal example:
 ```yaml
 defaults:
   fetcher: httpx
-  concurrency: 10
+  concurrency: 3
+  request_delay_ms: 500      # ~120 req/min; keep under Wordfence's 240/min
 sites:
   - name: my-site
     sitemap_urls:
       - https://example.com/sitemap.xml
 ```
 
-Per-site overrides are supported for every default. Environment-variable interpolation works in headers (`Authorization: "Bearer ${MY_TOKEN}"`).
+Per-site overrides are supported for every default. `sitemap_urls` is an ordered fallback: the first entry that yields URLs wins. Environment-variable interpolation works in headers using `${VAR}` (braces required; the only supported syntax), e.g. `Authorization: "Bearer ${MY_TOKEN}"`. An unset variable is a config error.
 
 ### Fetchers
 

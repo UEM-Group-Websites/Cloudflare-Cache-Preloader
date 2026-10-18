@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 import httpx
 
 from preloader.config import ResolvedSite
-from preloader.fetcher import FetchResult, make_fetcher
+from preloader.fetcher import FetchResult, RateLimitedTransport, make_fetcher
 from preloader.sitemap import discover_urls
 
 logger = logging.getLogger(__name__)
@@ -28,6 +28,11 @@ class SiteReport:
     budget_skipped: int = 0  # URLs left unfetched because the site's time budget ran out
     budget_exhausted: bool = False  # time budget ran out, during discovery or fetching
 
+    @property
+    def succeeded(self) -> int:
+        # `fetched` counts every completed request; `errors` only holds fetch failures.
+        return self.fetched - len(self.errors)
+
 
 async def _run_site(site: ResolvedSite, dry_run: bool) -> SiteReport:
     report = SiteReport(name=site.name)
@@ -45,7 +50,10 @@ async def _run_site(site: ResolvedSite, dry_run: bool) -> SiteReport:
         async with (
             budget,
             httpx.AsyncClient(
-                http2=True, timeout=site.timeout_seconds, headers=discovery_headers, follow_redirects=True
+                transport=RateLimitedTransport(httpx.AsyncHTTPTransport(http2=True), site.request_delay_ms / 1000),
+                timeout=site.timeout_seconds,
+                headers=discovery_headers,
+                follow_redirects=True,
             ) as discovery_client,
         ):
             sm = await discover_urls(
@@ -87,7 +95,13 @@ async def _run_site(site: ResolvedSite, dry_run: bool) -> SiteReport:
     async def _bounded(url: str) -> FetchResult:
         nonlocal completed
         async with sem:
-            r = await fetcher.fetch(url)
+            try:
+                r = await fetcher.fetch(url)
+            except Exception as e:
+                # A single bad URL must never take down the whole site's report.
+                r = FetchResult(
+                    url=url, status_code=None, cf_cache_status="NONE", elapsed_ms=0, error=f"{type(e).__name__}: {e}"
+                )
         completed += 1
         logger.info(
             "[%s] [%*d/%d] %s %s %dms %s%s",
@@ -112,7 +126,17 @@ async def _run_site(site: ResolvedSite, dry_run: bool) -> SiteReport:
     finally:
         await fetcher.aclose()
 
-    results = [t.result() for t in tasks if t in done]
+    results: list[FetchResult] = []
+    for t in tasks:
+        if t not in done:
+            continue
+        if (exc := t.exception()) is not None:
+            logger.error("[%s] fetch task failed", site.name, exc_info=exc)
+            report.fetched += 1
+            report.by_cf_status["NONE"] += 1
+            report.errors.append(("(unknown URL)", f"{type(exc).__name__}: {exc}"))
+            continue
+        results.append(t.result())
     report.budget_skipped = len(pending)
     report.budget_exhausted = bool(pending)
     if pending:
@@ -140,7 +164,7 @@ async def run(sites: list[ResolvedSite], dry_run: bool = False) -> list[SiteRepo
             return await _run_site(site, dry_run=dry_run)
         except Exception as e:
             logger.exception("[%s] unrecoverable error", site.name)
-            return SiteReport(name=site.name, errors=[(site.name, f"{type(e).__name__}: {e}")])
+            return SiteReport(name=site.name, sitemap_errors=[("(site run crashed)", f"{type(e).__name__}: {e}")])
 
     # Sites run in parallel — each site's Wordfence / WAF rate limit is independent,
     # and the per-site RateLimitedTransport in HttpxFetcher prevents per-site overrun.

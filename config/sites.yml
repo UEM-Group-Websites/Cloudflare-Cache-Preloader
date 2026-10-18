@@ -1,6 +1,6 @@
 # Cloudflare Cache Preloader — site configuration.
 # Run locally:  uv run python -m preloader --config config/sites.yml --dry-run
-# Run a single site:  uv run python -m preloader --config config/sites.yml --site iem
+# Run a single site:  uv run python -m preloader --config config/sites.yml --site "IEM Website"
 #
 # WORDFENCE NOTE: Both sites run Wordfence, which blocks IPs exceeding its
 # default 240 pages/min rate limit with HTTP 503.
@@ -38,6 +38,7 @@ defaults:
 sites:
   - name: "IEM Website"
     sitemap_urls:
+      # sitemap_urls is an ordered fallback: the first entry that yields URLs wins.
       - https://iem.edu.in/sitemap_index.xml
       - https://iem.edu.in/sitemap.xml        # fallback if index not present
     concurrency: 6                            # in-flight URLs; keeps MISS-heavy runs off the timeout

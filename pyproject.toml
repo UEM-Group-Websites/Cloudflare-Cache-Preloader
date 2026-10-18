@@ -12,7 +12,6 @@ dependencies = [
 
 [project.optional-dependencies]
 playwright = ["playwright>=1.62.0"]
-impersonate = ["curl_cffi>=0.7"]
 dev = [
     "pytest>=9.1.1",
     "pytest-asyncio>=1.4.0",
