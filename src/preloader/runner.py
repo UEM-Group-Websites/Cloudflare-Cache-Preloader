@@ -28,6 +28,11 @@ class SiteReport:
     budget_skipped: int = 0  # URLs left unfetched because the site's time budget ran out
     budget_exhausted: bool = False  # time budget ran out, during discovery or fetching
 
+    @property
+    def succeeded(self) -> int:
+        # `fetched` counts every completed request; `errors` only holds fetch failures.
+        return self.fetched - len(self.errors)
+
 
 async def _run_site(site: ResolvedSite, dry_run: bool) -> SiteReport:
     report = SiteReport(name=site.name)

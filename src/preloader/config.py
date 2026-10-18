@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 FetcherKind = Literal["httpx", "playwright"]
 
@@ -25,14 +25,27 @@ DEFAULT_HEADERS: dict[str, str] = {
 }
 
 
-_ENV_PATTERN = re.compile(r"\$\{?([A-Z_][A-Z0-9_]*)\}?")
+# Only the braced ${VAR} form is interpolated, so a literal $ in a cookie or token is left alone.
+_ENV_PATTERN = re.compile(r"\$\{([A-Z_][A-Z0-9_]*)\}")
 
 
 def _interpolate_env(value: str) -> str:
     def repl(m: re.Match[str]) -> str:
-        return os.environ.get(m.group(1), "")
+        name = m.group(1)
+        if name not in os.environ:
+            raise ValueError(f"environment variable {name} is not set (referenced as ${{{name}}} in headers)")
+        return os.environ[name]
 
     return _ENV_PATTERN.sub(repl, value)
+
+
+def _check_filters(patterns: list[str] | None) -> list[str] | None:
+    for p in patterns or []:
+        try:
+            re.compile(p)
+        except re.error as e:
+            raise ValueError(f"invalid sitemap_url_filters regex {p!r}: {e}") from e
+    return patterns
 
 
 class Defaults(BaseModel):
@@ -41,14 +54,14 @@ class Defaults(BaseModel):
     fetcher: FetcherKind = "httpx"
     user_agent: str = DEFAULT_USER_AGENT
     headers: dict[str, str] = Field(default_factory=lambda: dict(DEFAULT_HEADERS))
-    concurrency: int = 3
-    timeout_seconds: float = 20.0
-    retry_attempts: int = 2
-    max_urls_per_site: int = 5000
+    concurrency: int = Field(default=3, ge=1)
+    timeout_seconds: float = Field(default=20.0, gt=0)
+    retry_attempts: int = Field(default=2, ge=0)
+    max_urls_per_site: int = Field(default=5000, ge=1)
     sitemap_url_filters: list[str] = Field(default_factory=list)
     # 250 ms between requests per worker keeps ~12 req/s across 3 workers,
     # well under Wordfence's default 240 pages/min block threshold.
-    request_delay_ms: int = 250
+    request_delay_ms: int = Field(default=250, ge=0)
     # Wall-clock cap per site (discovery + fetching). When it runs out, unfetched URLs are
     # skipped and a partial report is still written. Keep it below the job's timeout-minutes.
     time_budget_seconds: float | None = Field(default=None, gt=0)
@@ -57,6 +70,8 @@ class Defaults(BaseModel):
     @classmethod
     def _interpolate_headers(cls, v: dict[str, str]) -> dict[str, str]:
         return {k: _interpolate_env(val) for k, val in v.items()}
+
+    _validate_filters = field_validator("sitemap_url_filters", mode="after")(_check_filters)
 
 
 class Site(BaseModel):
@@ -67,12 +82,12 @@ class Site(BaseModel):
     fetcher: FetcherKind | None = None
     user_agent: str | None = None
     headers: dict[str, str] | None = None
-    concurrency: int | None = None
-    timeout_seconds: float | None = None
-    retry_attempts: int | None = None
-    max_urls: int | None = None
+    concurrency: int | None = Field(default=None, ge=1)
+    timeout_seconds: float | None = Field(default=None, gt=0)
+    retry_attempts: int | None = Field(default=None, ge=0)
+    max_urls: int | None = Field(default=None, ge=1)
     sitemap_url_filters: list[str] | None = None
-    request_delay_ms: int | None = None
+    request_delay_ms: int | None = Field(default=None, ge=0)
     time_budget_seconds: float | None = Field(default=None, gt=0)
 
     @field_validator("headers", mode="after")
@@ -81,6 +96,8 @@ class Site(BaseModel):
         if v is None:
             return None
         return {k: _interpolate_env(val) for k, val in v.items()}
+
+    _validate_filters = field_validator("sitemap_url_filters", mode="after")(_check_filters)
 
 
 class ResolvedSite(BaseModel):
@@ -107,6 +124,14 @@ class Config(BaseModel):
 
     defaults: Defaults = Field(default_factory=Defaults)
     sites: list[Site] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def _unique_site_names(self) -> Config:
+        seen: set[str] = set()
+        dupes = sorted({s.name for s in self.sites if s.name in seen or seen.add(s.name)})
+        if dupes:
+            raise ValueError(f"duplicate site names: {', '.join(dupes)}")
+        return self
 
     def resolve(self) -> list[ResolvedSite]:
         resolved: list[ResolvedSite] = []
