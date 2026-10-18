@@ -23,4 +23,5 @@ if ! command -v uv >/dev/null 2>&1; then
 fi
 
 # Matches CI: Python version comes from .python-version, deps from uv.lock.
-uv sync --extra dev
+# --inexact keeps extras installed later (e.g. playwright) when the hook reruns on resume/compact.
+uv sync --extra dev --inexact
