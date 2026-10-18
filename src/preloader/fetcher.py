@@ -113,6 +113,8 @@ async def _sleep(seconds: float) -> None:
 
 def _is_transient(exc: Exception) -> bool:
     # httpx.InvalidURL, TooManyRedirects etc. would fail identically on every attempt.
+    # Anything that isn't an httpx error is treated as transient on purpose: that's how
+    # Playwright reports navigation timeouts and net::ERR_* failures.
     if isinstance(exc, httpx.InvalidURL):
         return False
     if isinstance(exc, httpx.HTTPError):

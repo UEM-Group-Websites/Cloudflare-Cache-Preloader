@@ -130,6 +130,13 @@ def test_invalid_config_prints_message_and_exits_2(tmp_path, fake_run, capsys) -
     assert "Traceback" not in err
 
 
+def test_non_utf8_config_exits_2(tmp_path, fake_run, capsys) -> None:
+    p = tmp_path / "bad.yaml"
+    p.write_bytes(b"sites: []\n\xff\xfe")
+    assert cli.main(["-c", str(p)]) == 2
+    assert "Traceback" not in capsys.readouterr().err
+
+
 def test_missing_config_file_exits_2(tmp_path, fake_run, capsys) -> None:
     assert cli.main(["-c", str(tmp_path / "missing.yaml")]) == 2
     assert capsys.readouterr().err

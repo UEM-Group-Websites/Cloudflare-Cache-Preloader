@@ -42,7 +42,7 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         cfg = load_config(args.config)
-    except (OSError, yaml.YAMLError, ValidationError) as e:
+    except (OSError, UnicodeError, yaml.YAMLError, ValidationError) as e:
         print(f"Invalid config {args.config}: {e}", file=sys.stderr)
         return 2
     sites = cfg.resolve()

@@ -189,3 +189,20 @@ async def test_rate_limited_transport_enforces_gap() -> None:
     tolerance = 0.01  # allow 10 ms clock jitter
     assert timestamps[1] - timestamps[0] >= min_gap - tolerance
     assert timestamps[2] - timestamps[1] >= min_gap - tolerance
+
+
+async def test_non_httpx_exceptions_are_retried(sleeps: list[float]) -> None:
+    # Playwright navigation timeouts / net::ERR_* errors aren't httpx exceptions but are transient.
+    calls = 0
+
+    async def once(url: str):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise TimeoutError("navigation timeout")
+        return 200, "HIT", None
+
+    r = await fetcher_mod._fetch_with_retry("https://e/p", 2, once)
+    assert calls == 2
+    assert r.ok
+    assert len(sleeps) == 1
