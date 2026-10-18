@@ -73,8 +73,12 @@ async def test_malformed_xml() -> None:
 
 
 def _urlset(*paths: str) -> bytes:
+    # Fixture XML from constant test paths; Semgrep's raw-html-format rule is a false positive here.
+    # nosemgrep: python.django.security.injection.raw-html-format.raw-html-format
     locs = "".join(f"<url><loc>https://example.com/{p}</loc></url>" for p in paths)
-    return f'<?xml version="1.0"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{locs}</urlset>'.encode()
+    ns = "http://www.sitemaps.org/schemas/sitemap/0.9"
+    # nosemgrep: python.django.security.injection.raw-html-format.raw-html-format
+    return f'<?xml version="1.0"?><urlset xmlns="{ns}">{locs}</urlset>'.encode()
 
 
 def _index(*names: str) -> bytes:

@@ -104,7 +104,7 @@ def parse_retry_after(value: str | None) -> float | None:
 def _retry_delay(attempt: int, retry_after: float | None) -> float:
     if retry_after is not None:
         return min(retry_after, MAX_RETRY_AFTER_S)
-    return _BACKOFF_BASE_S * (2**attempt) * random.uniform(0.5, 1.5)
+    return _BACKOFF_BASE_S * (2**attempt) * random.uniform(0.5, 1.5)  # nosec B311 - jitter, not crypto
 
 
 async def _sleep(seconds: float) -> None:
@@ -128,7 +128,8 @@ async def _fetch_with_retry(url: str, retries: int, once: _Attempt) -> FetchResu
     """Retry policy shared by both fetchers. Never raises: any per-URL failure becomes
     a FetchResult with `error` set, so one bad URL can't take down the site's run."""
     start = time.monotonic()
-    last: FetchResult | None = None
+    # Placeholder only: config validation guarantees retries >= 0, so the loop always overwrites it.
+    last = FetchResult(url, None, "NONE", 0, "not attempted")
     for attempt in range(retries + 1):
         retry_after: float | None = None
         try:
@@ -145,7 +146,6 @@ async def _fetch_with_retry(url: str, retries: int, once: _Attempt) -> FetchResu
             retry_after = parse_retry_after(retry_after_raw)
         if attempt < retries:
             await _sleep(_retry_delay(attempt, retry_after))
-    assert last is not None
     last.elapsed_ms = int((time.monotonic() - start) * 1000)
     return last
 

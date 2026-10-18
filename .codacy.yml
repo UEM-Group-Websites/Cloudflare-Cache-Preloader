@@ -1,0 +1,6 @@
+---
+engines:
+  bandit:
+    # pytest tests are written with plain `assert` (B101); Bandit still scans src/.
+    exclude_paths:
+      - "tests/**"
