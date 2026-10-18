@@ -32,6 +32,7 @@ def _maybe_gunzip(content: bytes, url: str, content_encoding: str | None) -> byt
 class SitemapResult:
     urls: list[str] = field(default_factory=list)
     errors: list[tuple[str, str]] = field(default_factory=list)
+    _seen_urls: set[str] = field(default_factory=set, init=False, repr=False, compare=False)
 
 
 async def _fetch_one(client: httpx.AsyncClient, url: str) -> bytes | None:
@@ -96,9 +97,12 @@ async def _walk(
             url = loc_el.text.strip()
             if filters and not any(p.search(url) for p in filters):
                 continue
-            out.urls.append(url)
+            if url in out._seen_urls:
+                continue
             if len(out.urls) >= max_urls:
                 return
+            out._seen_urls.add(url)
+            out.urls.append(url)
     else:
         out.errors.append((sitemap_url, f"unknown sitemap root tag: {tag}"))
 
@@ -115,12 +119,4 @@ async def discover_urls(
         await _walk(client, sm, 1, seen, out, filters, max_urls)
         if len(out.urls) >= max_urls:
             break
-    # Dedupe while preserving order.
-    deduped: list[str] = []
-    seen_urls: set[str] = set()
-    for u in out.urls:
-        if u not in seen_urls:
-            seen_urls.add(u)
-            deduped.append(u)
-    out.urls = deduped[:max_urls]
     return out
