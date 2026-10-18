@@ -3,15 +3,20 @@
 # WORDFENCE RATE LIMITING
 # Wordfence's default "Block immediately" threshold is 240 pages/min per IP.
 # Rate limiting is enforced at the HTTP-transport layer, so every outbound
-# request — including redirect follow-ups — counts against the gap.
-# WordPress typically chains 2–4 redirects per URL, so the effective server
-# hit-rate is 3–4× the logical URL rate. Rule of thumb:
+# request counts against the gap. Sitemaps normally list canonical URLs, so
+# redirect amplification is usually low and request_delay_ms maps almost
+# directly to HTTP req/min. (Caveat: if a sitemap lists URLs that redirect,
+# each follow-up request counts too, so leave extra headroom.)
 #
-#   request_delay_ms: 1500  →  ~40 logical req/min  →  ~120–160 HTTP req/min  ✓ safe
-#   request_delay_ms: 600   →  ~100 logical req/min →  ~300–400 HTTP req/min  ✗ blocked
-#   request_delay_ms: 3000  →  ~20 logical req/min  →  ~60–80  HTTP req/min   ✓✓ very safe
+#   request_delay_ms: 500   →  ~120 HTTP req/min  (half of Wordfence 240/min)  ✓ safe
+#   request_delay_ms: 1000  →  ~60  HTTP req/min                                ✓ very safe
+#   request_delay_ms: 250   →  ~240 HTTP req/min                                ⚠ at threshold
 #
-# For WordPress + Wordfence sites keep request_delay_ms ≥ 1500.
+# For WordPress + Wordfence sites keep request_delay_ms ≥ 500.
+#
+# sitemap_urls is an ordered fallback: the first entry that yields URLs wins.
+# Environment interpolation uses ${VAR} only (braces required); referencing an
+# unset variable is a config error.
 
 defaults:
   fetcher: httpx                     # httpx | playwright
@@ -27,7 +32,7 @@ defaults:
   retry_attempts: 2
   max_urls_per_site: 5000
   sitemap_url_filters: []            # optional regex allow-list applied to discovered URLs
-  request_delay_ms: 250              # generic/non-Wordfence default; override to >=1500 for WordPress+Wordfence
+  request_delay_ms: 250              # generic/non-Wordfence default; override to >=500 for WordPress+Wordfence
   time_budget_seconds: 2400          # optional per-site wall-clock cap; skips remaining URLs and still reports
 
 sites:
@@ -42,16 +47,16 @@ sites:
       - https://wp.example.com/sitemap_index.xml
       - https://wp.example.com/sitemap.xml     # fallback if index absent
     concurrency: 2
-    request_delay_ms: 1500           # ~40 logical req/min (~120–160 HTTP req/min with redirects)
+    request_delay_ms: 500            # ~120 HTTP req/min — half of Wordfence 240/min
 
   - name: protected-site
     sitemap_urls:
       - https://protected.example.com/sitemap.xml
     fetcher: playwright              # opt-in browser fetch for strict bot-check sites
     concurrency: 2
-    request_delay_ms: 1500
+    request_delay_ms: 1000
     headers:
       Referer: https://protected.example.com/
-      Authorization: "Bearer ${MY_TOKEN}"   # ${ENV_VAR} interpolation
+      Authorization: "Bearer ${MY_TOKEN}"   # ${VAR} interpolation (unset = error)
     sitemap_url_filters:
       - "^https://protected\\.example\\.com/(blog|docs)/"
