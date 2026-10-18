@@ -61,8 +61,8 @@ def main(argv: list[str] | None = None) -> int:
     body = summary.write(reports)
     print(body)
 
-    # Exit non-zero if any site crashed (nothing discovered, errors recorded), or — outside a dry run —
+    # Exit non-zero if any site crashed or discovered nothing because its sitemaps failed, or — outside a dry run —
     # if any site that discovered URLs got no successful fetch. One blocked site shouldn't hide behind healthy ones.
-    crashed = any(r.discovered == 0 and r.errors for r in reports)
+    crashed = any(r.discovered == 0 and (r.errors or r.sitemap_errors) for r in reports)
     all_failed = not args.dry_run and any(r.discovered > 0 and r.succeeded == 0 for r in reports)
     return 1 if crashed or all_failed else 0

@@ -69,8 +69,16 @@ def test_site_with_nothing_discovered_is_not_a_failure(config_path, fake_run) ->
 
 
 def test_exit_1_when_site_crashed(config_path, fake_run) -> None:
-    fake_run["reports"] = [_ok("a"), SiteReport(name="b", errors=[("b", "RuntimeError: boom")])]
+    fake_run["reports"] = [
+        _ok("a"),
+        SiteReport(name="b", sitemap_errors=[("(site run crashed)", "RuntimeError: boom")]),
+    ]
     assert cli.main(["-c", config_path]) == 1
+
+
+def test_exit_1_when_every_sitemap_failed(config_path, fake_run) -> None:
+    fake_run["reports"] = [_ok("a"), SiteReport(name="b", sitemap_errors=[("https://b.test/s.xml", "fetch failed")])]
+    assert cli.main(["--config", config_path]) == 1
 
 
 def test_dry_run_exits_0(config_path, fake_run) -> None:
@@ -83,7 +91,7 @@ def test_dry_run_exits_0(config_path, fake_run) -> None:
 
 
 def test_dry_run_exits_1_when_site_crashed(config_path, fake_run) -> None:
-    fake_run["reports"] = [SiteReport(name="a", errors=[("a", "RuntimeError: boom")])]
+    fake_run["reports"] = [SiteReport(name="a", sitemap_errors=[("(site run crashed)", "RuntimeError: boom")])]
     assert cli.main(["-c", config_path, "--dry-run"]) == 1
 
 
