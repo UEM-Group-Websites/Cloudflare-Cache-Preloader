@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 import httpx
 
 from preloader.config import ResolvedSite
-from preloader.fetcher import FetchResult, make_fetcher
+from preloader.fetcher import FetchResult, RateLimitedTransport, make_fetcher
 from preloader.sitemap import discover_urls
 
 logger = logging.getLogger(__name__)
@@ -50,7 +50,10 @@ async def _run_site(site: ResolvedSite, dry_run: bool) -> SiteReport:
         async with (
             budget,
             httpx.AsyncClient(
-                http2=True, timeout=site.timeout_seconds, headers=discovery_headers, follow_redirects=True
+                transport=RateLimitedTransport(httpx.AsyncHTTPTransport(http2=True), site.request_delay_ms / 1000),
+                timeout=site.timeout_seconds,
+                headers=discovery_headers,
+                follow_redirects=True,
             ) as discovery_client,
         ):
             sm = await discover_urls(
