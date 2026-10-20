@@ -1,0 +1,5 @@
+title: Cloudflare Cache Preloader
+description: "Pre-warms the Cloudflare edge cache by walking each site's sitemap and fetching every URL from GitHub Actions."
+show_downloads: true
+google_analytics:
+theme: jekyll-theme-cayman
